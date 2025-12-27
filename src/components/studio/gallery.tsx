@@ -4,9 +4,8 @@ import type { FC } from 'react';
 import { useState } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { Download, Sparkles, Send } from 'lucide-react';
+import { Download, Sparkles } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { sendToTelegram } from '@/ai/flows/telegram-sender';
 
 interface GalleryProps {
   photos: string[];
@@ -14,9 +13,6 @@ interface GalleryProps {
 }
 
 const Gallery: FC<GalleryProps> = ({ photos, onEditWithAi }) => {
-  const [isSending, setIsSending] = useState<string | null>(null);
-  const { toast } = useToast();
-
   const downloadPhoto = (url: string) => {
     const a = document.createElement('a');
     a.href = url;
@@ -26,36 +22,6 @@ const Gallery: FC<GalleryProps> = ({ photos, onEditWithAi }) => {
     document.body.removeChild(a);
   };
   
-  const handleSendToTelegram = async (photoUrl: string) => {
-    setIsSending(photoUrl);
-    try {
-      const result = await sendToTelegram({
-        photoDataUri: photoUrl,
-        caption: 'Gambar dari Stumble Studio PRO!',
-      });
-
-      if (result.success) {
-        toast({
-          title: 'Terkirim!',
-          description: 'Foto berhasil dikirim ke Telegram.',
-          className: "bg-green-500 border-4 border-black text-white stumble-font text-lg"
-        });
-      } else {
-        throw new Error(result.message);
-      }
-    } catch (error) {
-      console.error("Telegram sending failed:", error);
-      const errorMessage = error instanceof Error ? error.message : "Gagal mengirim ke Telegram. Coba lagi.";
-       toast({
-         variant: 'destructive',
-         title: 'Error',
-         description: errorMessage.includes("TELEGRAM_BOT_TOKEN") ? "Harap atur Bot Token & Chat ID Telegram di file .env Anda." : errorMessage,
-       });
-    } finally {
-      setIsSending(null);
-    }
-  };
-
   return (
     <div className="chunky-card p-6">
       <div className="flex justify-between items-center mb-4">
@@ -83,9 +49,6 @@ const Gallery: FC<GalleryProps> = ({ photos, onEditWithAi }) => {
                 </Button>
                 <Button onClick={() => onEditWithAi(photo)} className="stumble-btn btn-purple text-xs w-full h-auto py-1">
                   <Sparkles className="w-3 h-3 mr-1" /> Hapus BG
-                </Button>
-                <Button onClick={() => handleSendToTelegram(photo)} className="stumble-btn btn-blue text-xs w-full h-auto py-1" disabled={isSending === photo}>
-                  {isSending === photo ? 'Mengirim...' : <><Send className="w-3 h-3 mr-1" /> Telegram</>}
                 </Button>
               </div>
             </div>
