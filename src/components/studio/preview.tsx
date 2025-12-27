@@ -140,7 +140,7 @@ const Preview: FC<PreviewProps> = ({
 
     drawOverlaysOnCanvas(ctx, canvas.width, canvas.height);
 
-    const dataUrl = canvas.toDataURL('image/png');
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
     addPhoto(dataUrl);
     toast({
         title: "MANTAP! FOTO DISIMPAN",

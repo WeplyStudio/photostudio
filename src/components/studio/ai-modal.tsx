@@ -54,7 +54,7 @@ const AiModal: FC<AiModalProps> = ({ isOpen, setIsOpen, imageDataUri }) => {
         a.href = processedImage;
         a.download = `stumble-studio-edited-${Date.now()}.png`;
         document.body.appendChild(a);
-        a.click();
+a.click();
         document.body.removeChild(a);
     };
 

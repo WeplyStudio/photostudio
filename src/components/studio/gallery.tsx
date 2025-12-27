@@ -20,7 +20,7 @@ const Gallery: FC<GalleryProps> = ({ photos, onEditWithAi }) => {
   const downloadPhoto = (url: string) => {
     const a = document.createElement('a');
     a.href = url;
-    a.download = `stumble-studio-${Date.now()}.png`;
+    a.download = `stumble-studio-${Date.now()}.jpeg`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
