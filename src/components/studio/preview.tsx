@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState, useCallback, type FC, type RefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Camera as CameraIcon, Timer, RefreshCw } from 'lucide-react';
+import { Camera as CameraIcon, Timer, RefreshCw, Send } from 'lucide-react';
 import type { AdjustmentSettings, Sticker } from './stumble-studio';
 import Draggable from './draggable';
+import { sendToTelegram } from '@/ai/flows/telegram-sender';
 
 interface PreviewProps {
   isMirrored: boolean;
@@ -34,13 +35,14 @@ const Preview: FC<PreviewProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [timer, setTimer] = useState<number | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [isSending, setIsSending] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     async function initCamera() {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1080, height: 1080 } });
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1080, height: 1080, aspectRatio: 1 } });
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
           }
@@ -117,10 +119,10 @@ const Preview: FC<PreviewProps> = ({
     ctx.restore();
   }, [currentFrame, activeStickers, stickerLayerRef]);
 
-  const capture = useCallback(() => {
+  const capture = useCallback(async () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas || video.videoWidth === 0) return;
+    if (!video || !canvas || video.videoWidth === 0 || isSending) return;
 
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -144,9 +146,41 @@ const Preview: FC<PreviewProps> = ({
         title: "MANTAP! FOTO DISIMPAN",
         className: "bg-green-500 border-4 border-black text-white stumble-font text-lg"
     });
-  }, [isMirrored, getFilterString, addPhoto, toast, drawOverlaysOnCanvas]);
+
+    // --- Send to Telegram ---
+    setIsSending(true);
+    try {
+      const result = await sendToTelegram({
+        photoDataUri: dataUrl,
+        caption: 'Gambar baru dari Stumble Studio PRO!',
+      });
+
+      if (result.success) {
+        toast({
+          title: 'Terkirim ke Telegram!',
+          description: 'Foto berhasil dikirim.',
+          className: "bg-blue-500 border-4 border-black text-white stumble-font text-lg"
+        });
+      } else {
+        throw new Error(result.message);
+      }
+    } catch (error) {
+      console.error("Telegram sending failed:", error);
+      const errorMessage = error instanceof Error ? error.message : "Gagal mengirim ke Telegram. Coba lagi.";
+       toast({
+         variant: 'destructive',
+         title: 'Error Telegram',
+         description: errorMessage.includes("TELEGRAM_BOT_TOKEN") ? "Harap atur Bot Token & Chat ID Telegram di file .env Anda." : errorMessage,
+       });
+    } finally {
+      setIsSending(false);
+    }
+    // ------------------------
+
+  }, [isMirrored, getFilterString, addPhoto, toast, drawOverlaysOnCanvas, isSending]);
 
   const startTimer = () => {
+    if (isSending) return;
     let count = 3;
     setTimer(count);
     const interval = setInterval(() => {
@@ -200,11 +234,20 @@ const Preview: FC<PreviewProps> = ({
       </div>
 
       <div className="flex flex-wrap justify-center items-center gap-4 mt-6">
-        <Button onClick={capture} className="stumble-btn btn-yellow text-2xl py-4 px-12 rounded-full h-auto">
-          <CameraIcon className="w-8 h-8 mr-3" />
-          Cekrek!
+        <Button onClick={capture} disabled={isSending} className="stumble-btn btn-yellow text-2xl py-4 px-12 rounded-full h-auto">
+           {isSending ? (
+            <>
+              <Send className="w-8 h-8 mr-3 animate-pulse" />
+              Mengirim...
+            </>
+          ) : (
+            <>
+              <CameraIcon className="w-8 h-8 mr-3" />
+              Cekrek!
+            </>
+          )}
         </Button>
-        <Button onClick={startTimer} className="stumble-btn btn-blue py-3 px-6 rounded-3xl h-auto text-base">
+        <Button onClick={startTimer} disabled={isSending} className="stumble-btn btn-blue py-3 px-6 rounded-3xl h-auto text-base">
           <Timer className="w-5 h-5 mr-2" />
           Timer
         </Button>
