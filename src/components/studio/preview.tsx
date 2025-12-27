@@ -40,7 +40,7 @@ const Preview: FC<PreviewProps> = ({
     async function initCamera() {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1080, height: 1080 } });
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
           }
@@ -177,7 +177,7 @@ const Preview: FC<PreviewProps> = ({
 
   return (
     <div className="chunky-card p-4 bg-blue-900/40 relative">
-      <div className="mx-auto relative shadow-2xl aspect-[4/3] bg-black rounded-[20px] overflow-hidden border-4 border-white">
+      <div className="mx-auto relative shadow-2xl aspect-square max-w-full sm:max-w-md md:max-w-lg lg:max-w-xl bg-black rounded-[20px] overflow-hidden border-4 border-white">
         {cameraError && <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80"><p className="bg-red-600 p-4 rounded-xl font-bold">{cameraError}</p></div>}
         <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" style={{ transform: isMirrored ? 'scaleX(-1)' : 'none', filter: getFilterString() }}/>
         <canvas ref={canvasRef} className="hidden" />
